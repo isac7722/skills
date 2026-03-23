@@ -1,0 +1,18 @@
+# 스킬 소스 파일 (설치 시 자동 생성)
+.agents/
+
+# Claude Code 심볼릭 링크 (설치 시 자동 생성)
+.claude/
+
+# 로그 파일
+mcp_server.log
+
+# lock 파일은 커밋 대상
+!skills-lock.json
+
+skills-lock.json
+
+.env
+.env.*
+
+__pycache__/
