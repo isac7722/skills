@@ -120,14 +120,17 @@ def _resolve_people(notion, names: list[str]) -> list[dict]:
     """사용자 이름 목록 → Notion people ID 목록으로 변환."""
     if not names:
         return []
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "data"))
+    from mappers import DISPLAY_NAME_MAP
     users_resp = notion.users.list()
     all_users = users_resp.get("results", [])
     resolved = []
     for name in names:
-        name_lower = name.lower().strip()
+        # DISPLAY_NAME_MAP으로 한국어 이름을 Notion 표시 이름으로 변환
+        mapped_name = DISPLAY_NAME_MAP.get(name.strip(), name).lower().strip()
         for user in all_users:
             user_name = (user.get("name") or "").lower()
-            if name_lower == user_name or name_lower in user_name:
+            if mapped_name == user_name or mapped_name in user_name:
                 resolved.append({"object": "user", "id": user["id"]})
                 break
     return resolved

@@ -29,6 +29,15 @@ GIT_USER_MAP: dict[str, str] = {
     "honomoly": "장승헌",
 }
 
+# ── 한국어 이름 → Notion 표시 이름 매핑 ──
+# "유광중" → "광중 유" 등 자연스러운 한국어 입력을 Notion 이름으로 변환
+DISPLAY_NAME_MAP: dict[str, str] = {
+    "유광중": "광중 유",
+    "장승헌": "장승헌",
+    "김도현": "DOHYUN KIM",
+    "서동인": "Dongin Seo",
+}
+
 # ── relation DB ID → 룩업 테이블 매핑 ──
 RELATION_MAPS: dict[str, dict[str, str]] = {
     "316f557d-7eb6-809d-8135-d6ed11c6ce23": SUB_TEAM_MAP,  # (세부소속) DB
