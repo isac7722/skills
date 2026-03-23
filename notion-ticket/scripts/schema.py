@@ -80,7 +80,10 @@ class NotionTicket:
             elif prop_type == "status":
                 v = value.value if isinstance(value, Enum) else value
                 props[prop_name] = {"status": {"name": v}}
-            # people, relation은 ID 변환이 필요하므로 create_ticket.py에서 처리
+            elif prop_type == "multi_select":
+                names = value if isinstance(value, list) else [value]
+                props[prop_name] = {"multi_select": [{"name": n} for n in names if n]}
+            # people은 ID 변환이 필요하므로 create_ticket.py에서 처리
         return props
 
 
@@ -91,10 +94,8 @@ FIELD_MAP: dict[str, dict[str, str]] = {
     "dev_status": {"property": "개발팀진행상태", "type": "status"},
     "priority": {"property": "우선순위", "type": "select"},
     "assignee": {"property": "담당자", "type": "people"},
-    "sub_team": {"property": "(세부소속)", "type": "relation",
-                 "database_id": "316f557d-7eb6-809d-8135-d6ed11c6ce23"},
-    "team": {"property": "(소속팀)", "type": "relation",
-             "database_id": "315f557d-7eb6-80b8-96dd-d55d6854cd29"},
+    "sub_team": {"property": "세부 소속", "type": "multi_select"},
+    "team": {"property": "소속팀", "type": "multi_select"},
 }
 
 

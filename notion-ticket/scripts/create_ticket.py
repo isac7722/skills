@@ -128,7 +128,7 @@ def _resolve_people(notion, names: list[str]) -> list[dict]:
         for user in all_users:
             user_name = (user.get("name") or "").lower()
             if name_lower == user_name or name_lower in user_name:
-                resolved.append({"id": user["id"]})
+                resolved.append({"object": "user", "id": user["id"]})
                 break
     return resolved
 
