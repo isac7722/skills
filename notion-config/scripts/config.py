@@ -30,6 +30,16 @@ sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
 
 from notion_wrapper import NotionWrapper, get_token, output_json  # noqa: E402
 from config_loader import load_config, save_config  # noqa: E402
+from semantic_dictionary import load_semantic_dictionary  # noqa: E402
+
+_SEMANTIC = load_semantic_dictionary()
+_KOREAN_TO_ENGLISH: dict[str, str] = _SEMANTIC.get("korean_to_english", {})
+_SINGLETON_TYPE_KEYS: dict[str, str] = _SEMANTIC.get("singleton_type_keys", {})
+_ROLE_PATTERNS: list[tuple[str, str, str]] = [
+    (p["role"], p["prop_type"], p["prop_name"])
+    for p in _SEMANTIC.get("role_patterns", [])
+    if isinstance(p, dict) and "role" in p
+]
 
 
 def _require_token() -> str:
@@ -43,70 +53,6 @@ def _require_token() -> str:
         )
         sys.exit(1)
     return token
-
-
-# 한글 property 이름 → 의미 기반 영문 키 사전
-_KOREAN_TO_ENGLISH: dict[str, str] = {
-    "작업": "title",
-    "제목": "title",
-    "이름": "name",
-    "상태": "status",
-    "진행상태": "status",
-    "진행 상태": "status",
-    "개발팀진행상태": "dev_status",
-    "담당자": "assignee",
-    "우선순위": "priority",
-    "마감일": "due_date",
-    "완료일": "completed_at",
-    "작성일": "created_at",
-    "작성자": "author",
-    "설명": "description",
-    "종류": "category",
-    "카테고리": "category",
-    "태그": "tags",
-    "소속팀": "team",
-    "세부 소속": "sub_team",
-    "세부소속": "sub_team",
-    "프로젝트": "project",
-    "관련 링크": "links",
-    "관련링크": "links",
-    "하위 작업": "subtasks",
-    "하위 작업_1": "subtasks",
-    "상위 작업": "parent_task",
-    "후속 작업": "followups",
-    "선행 작업": "prerequisites",
-    "참조인": "watchers",
-    "참조 링크": "reference_links",
-    "참조링크": "reference_links",
-    "파일/사진": "attachments",
-    "파일": "attachments",
-    "사진": "images",
-    "버전": "version",
-    "현재 적용버전": "current_version",
-    "배포일": "released_at",
-    "실제 배포 시간": "deployed_at",
-    "팀": "team",
-    "서비스": "service",
-    "도메인": "domain",
-    "기능 이름": "feature_name",
-    "변경이력": "history",
-    "최종수정일": "updated_at",
-    "규모(명)": "scale",
-    "커스터마이징여부": "is_customized",
-    "디자인 링크 (figma)": "design_link",
-    "디자인 링크": "design_link",
-}
-
-
-# 단일 인스턴스 타입은 타입 이름을 키로 사용 (DB당 한 개만 존재할 확률이 높은 시스템 필드)
-_SINGLETON_TYPE_KEYS: dict[str, str] = {
-    "title": "title",
-    "created_time": "created_at",
-    "last_edited_time": "updated_at",
-    "created_by": "created_by",
-    "last_edited_by": "updated_by",
-    "unique_id": "unique_id",
-}
 
 
 def _slugify_field_name(prop_name: str) -> str:
@@ -152,27 +98,6 @@ def _semantic_field_name(prop_name: str, prop_type: str, role: str | None) -> st
         return _english_snake(normalized)
 
     return _slugify_field_name(prop_name)
-
-
-# 이름 패턴 기반 role 추론 규칙
-_ROLE_PATTERNS: list[tuple[str, str, str]] = [
-    # (role, prop_type_regex, prop_name_regex)
-    ("status", r"^(status|select)$", r"상태|진행|status|state"),
-    ("priority", r"^select$", r"우선|priority"),
-    ("category", r"^select$", r"종류|카테고리|category|kind|type"),
-    ("assignee", r"^people$", r"담당|assignee|owner"),
-    ("author", r"^people$", r"작성|author"),
-    ("watchers", r"^people$", r"참조|watcher|reviewer"),
-    ("due_date", r"^date$", r"마감|due|deadline"),
-    ("completed_at", r"^date$", r"완료|completed|done"),
-    ("created_at", r"^date$", r"작성|created|start"),
-    ("released_at", r"^date$", r"배포|release"),
-    ("tags", r"^multi_select$", r"태그|tags?\b|labels?"),
-    ("team", r"^(multi_select|relation)$", r"소속팀|\bteam"),
-    ("sub_team", r"^(multi_select|relation)$", r"세부\s*소속|sub.?team"),
-    ("project", r"^relation$", r"프로젝트|project"),
-    ("links", r"^url$", r"링크|link|url"),
-]
 
 
 def _infer_role(
@@ -231,6 +156,102 @@ def _build_search_config(field_map: dict) -> dict:
     return search
 
 
+def _extract_page_title(page: dict) -> str:
+    """Notion page 객체에서 title 문자열을 추출한다."""
+    for prop in (page.get("properties") or {}).values():
+        if prop.get("type") == "title":
+            parts = prop.get("title") or []
+            return "".join(p.get("plain_text", "") for p in parts).strip()
+    return ""
+
+
+def _resolve_relation_target_data_source(nw: NotionWrapper, relation_info: dict) -> str:
+    """relation 프로퍼티의 target database_id → 첫 data_source_id 해석."""
+    target_db_id = relation_info.get("database_id") or ""
+    if not target_db_id:
+        return ""
+    try:
+        target_db = nw.retrieve_database(target_db_id)
+    except Exception:
+        return ""
+    data_sources = target_db.get("data_sources") or []
+    return data_sources[0]["id"] if data_sources else ""
+
+
+def _fetch_users_lookup(nw: NotionWrapper) -> dict[str, str]:
+    """workspace 사용자 → {name: user_id} 맵 생성. bot 제외."""
+    lookup: dict[str, str] = {}
+    try:
+        users = nw.list_users()
+    except Exception:
+        return lookup
+    for user in users:
+        if user.get("type") != "person":
+            continue
+        name = (user.get("name") or "").strip()
+        if name:
+            lookup[name] = user["id"]
+    return lookup
+
+
+def _fetch_relation_lookup(nw: NotionWrapper, data_source_id: str, limit: int = 200) -> dict[str, str]:
+    """data_source의 페이지 목록을 순회하여 {title: page_id} 맵 생성."""
+    lookup: dict[str, str] = {}
+    try:
+        result = nw.client.data_sources.query(data_source_id=data_source_id, page_size=100)
+    except Exception:
+        return lookup
+
+    fetched = 0
+    while True:
+        for page in result.get("results", []):
+            title = _extract_page_title(page)
+            if title:
+                lookup[title] = page["id"]
+            fetched += 1
+            if fetched >= limit:
+                return lookup
+        if not result.get("has_more"):
+            break
+        try:
+            result = nw.client.data_sources.query(
+                data_source_id=data_source_id,
+                page_size=100,
+                start_cursor=result.get("next_cursor"),
+            )
+        except Exception:
+            break
+    return lookup
+
+
+def _fetch_schema_lookups(nw: NotionWrapper, field_map: dict) -> dict[str, dict[str, str]]:
+    """field_map의 relation 엔트리들에 대해 {data_source_id: {title: page_id}} 맵 생성."""
+    result: dict[str, dict[str, str]] = {}
+    for entry in field_map.values():
+        if entry.get("type") != "relation":
+            continue
+        ds_id = entry.get("relation_data_source_id")
+        if not ds_id or ds_id in result:
+            continue
+        result[ds_id] = _fetch_relation_lookup(nw, ds_id)
+    return result
+
+
+def _merge_lookups(existing: dict, fresh_users: dict, fresh_relations: dict) -> dict:
+    """기존 lookups 위에 새 users/relations를 병합한다."""
+    merged = dict(existing or {})
+    if fresh_users:
+        existing_users = dict(merged.get("users") or {})
+        existing_users.update(fresh_users)
+        merged["users"] = existing_users
+    if fresh_relations:
+        existing_relations = dict(merged.get("relations") or {})
+        for ds_id, mapping in fresh_relations.items():
+            existing_relations[ds_id] = mapping
+        merged["relations"] = existing_relations
+    return merged
+
+
 def _fetch_schema_as_field_map(nw: NotionWrapper, database_id: str) -> dict | None:
     """Notion API로 DB 스키마를 조회하여 config.yaml field_map 형식으로 변환한다.
 
@@ -287,6 +308,12 @@ def _fetch_schema_as_field_map(nw: NotionWrapper, database_id: str) -> dict | No
         if prop_type in ("select", "multi_select", "status"):
             options = prop_info.get(prop_type, {}).get("options", [])
             entry["options"] = [o["name"] for o in options]
+
+        if prop_type == "relation":
+            rel_info = prop_info.get("relation", {})
+            target_ds_id = _resolve_relation_target_data_source(nw, rel_info)
+            if target_ds_id:
+                entry["relation_data_source_id"] = target_ds_id
 
         field_map[key] = entry
 
@@ -370,6 +397,14 @@ def cmd_add(args: list[str]) -> int:
         if entry.get("role")
     }
 
+    # lookups 자동 수집 (users + relation targets)
+    fresh_users = _fetch_users_lookup(nw)
+    fresh_relations = _fetch_schema_lookups(nw, schema["field_map"])
+    lookups_summary = {
+        "users": len(fresh_users),
+        "relations": {ds: len(m) for ds, m in fresh_relations.items()},
+    }
+
     if not ns.yes:
         output_json(
             True,
@@ -382,6 +417,7 @@ def cmd_add(args: list[str]) -> int:
             fields=list(schema["field_map"].keys()),
             roles=roles,
             search=schema.get("search", {}),
+            lookups_to_add=lookups_summary,
             would_overwrite=already_exists,
             hint="확정: config.py add <type_name> <database_id> --yes"
             + (" --force" if already_exists else ""),
@@ -391,6 +427,9 @@ def cmd_add(args: list[str]) -> int:
 
     # 실제 저장
     data_types[type_name] = new_entry
+    config["lookups"] = _merge_lookups(
+        config.get("lookups") or {}, fresh_users, fresh_relations
+    )
 
     if not config.get("default_type"):
         config["default_type"] = type_name
@@ -407,8 +446,87 @@ def cmd_add(args: list[str]) -> int:
         fields=list(schema["field_map"].keys()),
         roles=roles,
         search=schema.get("search", {}),
+        lookups_added=lookups_summary,
         overwrote=already_exists,
         is_default=(config.get("default_type") == type_name),
+    )
+    return 0
+
+
+def cmd_refresh_lookups(args: list[str]) -> int:
+    """등록된 data_type(s)의 lookups(users, relation targets)를 다시 수집한다.
+
+    사용법:
+        config.py refresh-lookups [type_name] [--yes]
+    type_name을 생략하면 등록된 모든 타입에 대해 수행한다.
+    기본은 드라이런(카운트만 출력).
+    """
+    parser = argparse.ArgumentParser(prog="config.py refresh-lookups")
+    parser.add_argument("type_name", nargs="?", default=None)
+    parser.add_argument("--yes", action="store_true", help="실제로 저장한다")
+    try:
+        ns = parser.parse_args(args)
+    except SystemExit:
+        output_json(False, error="사용법: config.py refresh-lookups [type_name] [--yes]")
+        return 3
+
+    config = load_config()
+    data_types = config.get("data_types") or {}
+    if not data_types:
+        output_json(False, error="등록된 데이터 타입이 없습니다.")
+        return 3
+
+    targets: list[str]
+    if ns.type_name:
+        if ns.type_name not in data_types:
+            output_json(
+                False,
+                error=f"'{ns.type_name}'은(는) 등록되지 않은 데이터 타입입니다.",
+                registered=list(data_types.keys()),
+            )
+            return 3
+        targets = [ns.type_name]
+    else:
+        targets = list(data_types.keys())
+
+    _require_token()
+    nw = NotionWrapper()
+
+    fresh_users = _fetch_users_lookup(nw)
+    fresh_relations: dict[str, dict[str, str]] = {}
+    per_type: dict[str, dict[str, int]] = {}
+    for t in targets:
+        field_map = (data_types[t] or {}).get("field_map") or {}
+        t_relations = _fetch_schema_lookups(nw, field_map)
+        per_type[t] = {ds: len(m) for ds, m in t_relations.items()}
+        fresh_relations.update(t_relations)
+
+    summary = {
+        "users": len(fresh_users),
+        "relations": {ds: len(m) for ds, m in fresh_relations.items()},
+        "per_type": per_type,
+    }
+
+    if not ns.yes:
+        output_json(
+            True,
+            dry_run=True,
+            message="[드라이런] refresh-lookups 미리보기. 확정하려면 --yes 를 추가하세요.",
+            targets=targets,
+            lookups_to_add=summary,
+        )
+        return 0
+
+    config["lookups"] = _merge_lookups(
+        config.get("lookups") or {}, fresh_users, fresh_relations
+    )
+    save_config(config)
+
+    output_json(
+        True,
+        message="lookups 가 업데이트되었습니다.",
+        targets=targets,
+        lookups_added=summary,
     )
     return 0
 
@@ -556,6 +674,7 @@ COMMANDS = {
     "remove": cmd_remove,
     "show": cmd_show,
     "set-default": cmd_set_default,
+    "refresh-lookups": cmd_refresh_lookups,
 }
 
 

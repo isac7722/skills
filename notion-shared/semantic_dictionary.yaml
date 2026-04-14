@@ -1,0 +1,114 @@
+# Notion property 이름 → 의미 기반 영문 키 매핑과 role 추론 규칙.
+# notion-config/scripts/config.py 가 DB 스키마를 읽어 field_map을 생성할 때 사용한다.
+# 이 파일을 수정하면 코드 변경 없이 매핑 규칙을 확장할 수 있다.
+
+# ── 한글/영문 property 이름 → 의미 기반 영문 키 ──
+korean_to_english:
+  작업: title
+  제목: title
+  이름: name
+  상태: status
+  진행상태: status
+  진행 상태: status
+  개발팀진행상태: dev_status
+  담당자: assignee
+  우선순위: priority
+  마감일: due_date
+  완료일: completed_at
+  작성일: created_at
+  작성자: author
+  설명: description
+  종류: category
+  카테고리: category
+  태그: tags
+  소속팀: team
+  세부 소속: sub_team
+  세부소속: sub_team
+  프로젝트: project
+  관련 링크: links
+  관련링크: links
+  하위 작업: subtasks
+  상위 작업: parent_task
+  후속 작업: followups
+  선행 작업: prerequisites
+  참조인: watchers
+  참조 링크: reference_links
+  참조링크: reference_links
+  파일/사진: attachments
+  파일: attachments
+  사진: images
+  버전: version
+  현재 적용버전: current_version
+  배포일: released_at
+  실제 배포 시간: deployed_at
+  팀: team
+  서비스: service
+  도메인: domain
+  기능 이름: feature_name
+  변경이력: history
+  최종수정일: updated_at
+  규모(명): scale
+  규모: scale
+  커스터마이징여부: is_customized
+  디자인 링크 (figma): design_link
+  디자인 링크: design_link
+  관련 업무: related_tasks
+
+# ── 단일 인스턴스 시스템 타입 → 기본 키 ──
+# DB당 하나만 존재할 확률이 높은 시스템 필드
+singleton_type_keys:
+  title: title
+  created_time: created_at
+  last_edited_time: updated_at
+  created_by: created_by
+  last_edited_by: updated_by
+  unique_id: unique_id
+
+# ── role 추론 패턴 (위에서 아래로 평가, 먼저 매치하는 규칙이 선택됨) ──
+# prop_type은 정규식, prop_name은 정규식 (lowercase / 원본 둘 다 검사)
+role_patterns:
+  - role: status
+    prop_type: "^(status|select)$"
+    prop_name: "상태|진행|status|state"
+  - role: priority
+    prop_type: "^select$"
+    prop_name: "우선|priority"
+  - role: category
+    prop_type: "^select$"
+    prop_name: "종류|카테고리|category|kind|type"
+  - role: assignee
+    prop_type: "^people$"
+    prop_name: "담당|assignee|owner"
+  - role: author
+    prop_type: "^people$"
+    prop_name: "작성|author"
+  - role: watchers
+    prop_type: "^people$"
+    prop_name: "참조|watcher|reviewer"
+  - role: due_date
+    prop_type: "^date$"
+    prop_name: "마감|due|deadline"
+  - role: completed_at
+    prop_type: "^date$"
+    prop_name: "완료|completed|done"
+  - role: created_at
+    prop_type: "^date$"
+    prop_name: "작성|created|start"
+  - role: released_at
+    prop_type: "^date$"
+    prop_name: "배포|release"
+  - role: tags
+    prop_type: "^multi_select$"
+    prop_name: "태그|tags?\\b|labels?"
+  - role: team
+    prop_type: "^(multi_select|relation)$"
+    prop_name: "소속팀|\\bteam"
+  - role: sub_team
+    prop_type: "^(multi_select|relation)$"
+    prop_name: "세부\\s*소속|sub.?team"
+  - role: project
+    prop_type: "^relation$"
+    prop_name: "프로젝트|project"
+  - role: links
+    prop_type: "^url$"
+    prop_name: "링크|link|url"
