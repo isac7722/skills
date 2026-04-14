@@ -28,7 +28,10 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
+_LOOKUP_TTL_HOURS = 24
 
 # notion-shared를 import path에 추가
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
@@ -116,6 +119,34 @@ def read_input_data(args: argparse.Namespace) -> dict:
 def resolve_type_name(args: argparse.Namespace) -> str | None:
     """CLI 인자에서 데이터 타입 이름을 결정한다."""
     return args.type_name or args.type_name_alias or None
+
+
+def _check_lookups_staleness(lookups: dict) -> str | None:
+    """lookups.meta.fetched_at 을 확인하고 stale 하면 경고 문자열을 반환한다."""
+    meta = (lookups or {}).get("meta") or {}
+    fetched_at = meta.get("fetched_at")
+    if not fetched_at:
+        return None
+    try:
+        ts = datetime.fromisoformat(fetched_at)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - ts
+    hours = int(age.total_seconds() // 3600)
+    if hours >= _LOOKUP_TTL_HOURS:
+        return (
+            f"lookups 가 {hours}시간 전에 수집되었습니다. "
+            f"최신 상태로 동기화하려면 '/notion-config refresh-lookups' 를 실행하세요."
+        )
+    return None
+
+
+def _emit_warnings(warnings: list[str]) -> None:
+    """경고를 stderr 에 출력한다 (stdout 의 success JSON 에도 포함됨)."""
+    for msg in warnings:
+        print(f"[warning] {msg}", file=sys.stderr)
 
 
 def _route_by_role(data: dict, field_map: dict) -> dict:
@@ -264,11 +295,20 @@ def _create_page(
             children = parse_markdown_to_children(data["body"])
 
         result = nw.create_page(database_id, properties, children, data_source_id=data_source_id)
-        output_json(True, url=result.get("url", ""), page_id=result.get("id", ""))
+        output_json(True, url=result.get("url", ""), page_id=result.get("id", ""), **_warnings_kwargs(lookups))
         return 0
     except Exception as e:
         output_json(False, error=f"Notion API 오류: {e}")
         return 2
+
+
+def _warnings_kwargs(lookups: dict) -> dict:
+    """lookups staleness 경고가 있으면 warnings=[...] 를 반환한다."""
+    w = _check_lookups_staleness(lookups)
+    if w:
+        _emit_warnings([w])
+        return {"warnings": [w]}
+    return {}
 
 
 def _update_page(nw: NotionWrapper, page_id: str, field_map: dict, data: dict, lookups: dict) -> int:
@@ -286,7 +326,7 @@ def _update_page(nw: NotionWrapper, page_id: str, field_map: dict, data: dict, l
             if children:
                 nw.replace_children(page_id, children)
 
-        output_json(True, url=result.get("url", ""), page_id=page_id)
+        output_json(True, url=result.get("url", ""), page_id=page_id, **_warnings_kwargs(lookups))
         return 0
     except Exception as e:
         output_json(False, error=f"Notion API 오류: {e}")

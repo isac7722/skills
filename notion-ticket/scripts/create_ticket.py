@@ -53,10 +53,21 @@ from update import (  # noqa: E402
     _route_by_role,
     _resolve_people_from_lookups,
     _resolve_relations_from_lookups,
+    _check_lookups_staleness,
+    _emit_warnings,
 )
 
 
 _DEFAULT_TYPE = "task"
+
+
+def _ticket_warnings(lookups: dict) -> dict:
+    """lookups staleness 경고가 있으면 warnings kwargs 반환."""
+    w = _check_lookups_staleness(lookups)
+    if w:
+        _emit_warnings([w])
+        return {"warnings": [w]}
+    return {}
 
 
 def _read_stdin_json() -> dict:
@@ -205,12 +216,14 @@ def main() -> int:
                 children = parse_markdown_to_children(data["body"])
                 if children:
                     nw.replace_children(page_id, children)
+            warnings_kw = _ticket_warnings(lookups)
             output_json(
                 True,
                 message="티켓이 업데이트되었습니다",
                 url=result.get("url", ""),
                 page_id=page_id,
                 task_id=args.task_id,
+                **warnings_kw,
             )
             return 0
 
@@ -223,11 +236,13 @@ def main() -> int:
             children,
             data_source_id=type_config.get("data_source_id") or None,
         )
+        warnings_kw = _ticket_warnings(lookups)
         output_json(
             True,
             message="티켓이 생성되었습니다",
             url=result.get("url", ""),
             page_id=result.get("id", ""),
+            **warnings_kw,
         )
         return 0
 
