@@ -137,8 +137,15 @@ def get_field_map(config: dict[str, Any], type_name: str | None = None) -> dict[
             "property": info.get("property", field_name),
             "type": info.get("type", "rich_text"),
         }
-        # 추가 메타 보존 (options, default, required 등)
-        for extra in ("options", "default", "required", "description"):
+        # 추가 메타 보존 (options, default, required, role 등)
+        for extra in (
+            "options",
+            "default",
+            "required",
+            "description",
+            "role",
+            "relation_data_source_id",
+        ):
             if extra in info:
                 result[field_name][extra] = info[extra]
     return result

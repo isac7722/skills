@@ -118,19 +118,98 @@ def resolve_type_name(args: argparse.Namespace) -> str | None:
     return args.type_name or args.type_name_alias or None
 
 
+def _route_by_role(data: dict, field_map: dict) -> dict:
+    """data의 role-like 키를 field_map 실제 키로 리매핑한다.
+
+    우선순위:
+      1. data의 키가 field_map에 그대로 존재하면 그대로 유지
+      2. data의 키와 role이 일치하는 field_map 엔트리가 있으면 그 키로 리네임
+      3. 매칭 실패 시 원본 유지 (body 같은 예약 키, 오타 등)
+    """
+    routed: dict = {}
+    keys = set(field_map.keys())
+    role_index: dict[str, str] = {}
+    for key, entry in field_map.items():
+        role = entry.get("role")
+        if role and role not in role_index:
+            role_index[role] = key
+
+    for data_key, value in data.items():
+        if data_key in keys:
+            routed[data_key] = value
+            continue
+        target = role_index.get(data_key)
+        if target:
+            routed[target] = value
+            continue
+        routed[data_key] = value
+    return routed
+
+
 def _resolve_people_from_lookups(nw: NotionWrapper, data: dict, field_map: dict, lookups: dict) -> dict:
-    """people 타입 필드를 Notion user ID로 resolve한다."""
-    display_name_map = lookups.get("display_name_map", {})
+    """people 타입 필드를 Notion user ID로 resolve한다.
+
+    우선순위:
+      1. lookups.users 에 모든 이름이 있으면 API 호출 없이 바로 ID 매핑
+      2. 부족하면 display_name_map 을 보조로 써서 nw.resolve_people 호출
+    """
+    users_lookup = lookups.get("users") or {}
+    display_name_map = lookups.get("display_name_map") or {}
     props: dict = {}
     for field_name, mapping in field_map.items():
         if field_name not in data or mapping["type"] != "people":
             continue
         names = data[field_name] if isinstance(data[field_name], list) else [data[field_name]]
         names = [n for n in names if n]
-        if names:
-            people_ids = nw.resolve_people(names, display_name_map)
-            if people_ids:
-                props[mapping["property"]] = {"people": people_ids}
+        if not names:
+            continue
+
+        people_ids: list[dict] = []
+        missing: list[str] = []
+        for name in names:
+            uid = users_lookup.get(name) or users_lookup.get(name.strip())
+            if uid:
+                people_ids.append({"object": "user", "id": uid})
+            else:
+                missing.append(name)
+
+        if missing:
+            resolved_missing = nw.resolve_people(missing, display_name_map)
+            people_ids.extend(resolved_missing)
+
+        if people_ids:
+            props[mapping["property"]] = {"people": people_ids}
+    return props
+
+
+def _resolve_relations_from_lookups(data: dict, field_map: dict, lookups: dict) -> dict:
+    """relation 타입 필드를 target data_source의 {title: page_id} 맵으로 resolve한다."""
+    relations_lookup = lookups.get("relations") or {}
+    props: dict = {}
+    for field_name, mapping in field_map.items():
+        if field_name not in data or mapping["type"] != "relation":
+            continue
+        ds_id = mapping.get("relation_data_source_id")
+        if not ds_id:
+            continue
+        target_map = relations_lookup.get(ds_id) or {}
+        if not target_map:
+            continue
+
+        raw_value = data[field_name]
+        names = raw_value if isinstance(raw_value, list) else [raw_value]
+        names = [n for n in names if n]
+        if not names:
+            continue
+
+        relation_ids: list[dict] = []
+        for name in names:
+            page_id = target_map.get(name) or target_map.get(str(name).strip())
+            if page_id:
+                relation_ids.append({"id": page_id})
+
+        if relation_ids:
+            props[mapping["property"]] = {"relation": relation_ids}
     return props
 
 
@@ -165,17 +244,26 @@ def _find_page_by_unique_id(nw: NotionWrapper, type_config: dict, unique_id_str:
 
 # ── 생성/업데이트 ──
 
-def _create_page(nw: NotionWrapper, database_id: str, field_map: dict, data: dict, lookups: dict) -> int:
+def _create_page(
+    nw: NotionWrapper,
+    database_id: str,
+    field_map: dict,
+    data: dict,
+    lookups: dict,
+    data_source_id: str | None = None,
+) -> int:
     """새 페이지를 생성한다."""
     try:
+        data = _route_by_role(data, field_map)
         properties = build_properties(field_map, data)
         properties.update(_resolve_people_from_lookups(nw, data, field_map, lookups))
+        properties.update(_resolve_relations_from_lookups(data, field_map, lookups))
 
         children = None
         if data.get("body"):
             children = parse_markdown_to_children(data["body"])
 
-        result = nw.create_page(database_id, properties, children)
+        result = nw.create_page(database_id, properties, children, data_source_id=data_source_id)
         output_json(True, url=result.get("url", ""), page_id=result.get("id", ""))
         return 0
     except Exception as e:
@@ -186,8 +274,10 @@ def _create_page(nw: NotionWrapper, database_id: str, field_map: dict, data: dic
 def _update_page(nw: NotionWrapper, page_id: str, field_map: dict, data: dict, lookups: dict) -> int:
     """기존 페이지를 업데이트한다."""
     try:
+        data = _route_by_role(data, field_map)
         properties = build_properties(field_map, data)
         properties.update(_resolve_people_from_lookups(nw, data, field_map, lookups))
+        properties.update(_resolve_relations_from_lookups(data, field_map, lookups))
 
         result = nw.update_page(page_id, properties)
 
@@ -248,7 +338,10 @@ def main() -> int:
     if page_id:
         return _update_page(nw, page_id, field_map, data, lookups)
     else:
-        return _create_page(nw, database_id, field_map, data, lookups)
+        return _create_page(
+            nw, database_id, field_map, data, lookups,
+            data_source_id=type_config.get("data_source_id") or None,
+        )
 
 
 if __name__ == "__main__":
