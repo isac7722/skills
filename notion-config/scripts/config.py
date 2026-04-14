@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # notion-shared 모듈 경로 추가
@@ -100,37 +101,71 @@ def _semantic_field_name(prop_name: str, prop_type: str, role: str | None) -> st
     return _slugify_field_name(prop_name)
 
 
-def _infer_role(
-    prop_name: str,
-    prop_type: str,
-    used_roles: set[str],
-) -> str | None:
-    """property에 대해 role을 추론한다. 이미 사용된 role은 건너뛴다 (title, unique_id 등 중복 불허)."""
-    # 확정 타입 — 이름 검사 불필요
-    if prop_type == "title" and "title" not in used_roles:
-        return "title"
-    if prop_type == "unique_id" and "unique_id" not in used_roles:
-        return "unique_id"
-    if prop_type == "created_time" and "created_at" not in used_roles:
-        return "created_at"
-    if prop_type == "last_edited_time" and "updated_at" not in used_roles:
-        return "updated_at"
-    if prop_type == "created_by" and "created_by" not in used_roles:
-        return "created_by"
-    if prop_type == "last_edited_by" and "updated_by" not in used_roles:
-        return "updated_by"
+# 확정 타입 → role (이름 검사 불필요, 타입당 1개)
+_FIXED_TYPE_ROLES: dict[str, str] = {
+    "title": "title",
+    "unique_id": "unique_id",
+    "created_time": "created_at",
+    "last_edited_time": "updated_at",
+    "created_by": "created_by",
+    "last_edited_by": "updated_by",
+}
 
-    # 이름 패턴 기반
-    name_lower = prop_name.lower()
-    for role, type_re, name_re in _ROLE_PATTERNS:
-        if role in used_roles:
-            continue
-        if not re.match(type_re, prop_type):
-            continue
-        if re.search(name_re, name_lower) or re.search(name_re, prop_name):
-            return role
 
-    return None
+def _score_candidates(raw_props: dict) -> dict[str, list[tuple[int, int, str]]]:
+    """각 role 에 대해 (score, order, prop_name) 후보 목록을 모은다.
+
+    score = len(prop_name). 낮을수록 좋음 (짧고 핵심적인 이름 선호).
+    order = raw_props 에서의 원본 인덱스 (tie-break).
+    """
+    candidates: dict[str, list[tuple[int, int, str]]] = {}
+    for idx, (prop_name, prop_info) in enumerate(raw_props.items()):
+        prop_type = prop_info.get("type", "unknown")
+
+        fixed_role = _FIXED_TYPE_ROLES.get(prop_type)
+        if fixed_role:
+            candidates.setdefault(fixed_role, []).append((len(prop_name), idx, prop_name))
+            continue
+
+        name_lower = prop_name.lower()
+        for role, type_re, name_re in _ROLE_PATTERNS:
+            if not re.match(type_re, prop_type):
+                continue
+            if re.search(name_re, name_lower) or re.search(name_re, prop_name):
+                candidates.setdefault(role, []).append((len(prop_name), idx, prop_name))
+    return candidates
+
+
+def _assign_roles(candidates: dict[str, list[tuple[int, int, str]]]) -> dict[str, str]:
+    """각 role 당 최저 점수 후보에 role 할당. 한 property 는 하나의 role만 가진다.
+
+    Returns: {prop_name: role}
+    """
+    # role 별로 정렬된 후보 큐 준비
+    queues: dict[str, list[tuple[int, int, str]]] = {
+        role: sorted(cands) for role, cands in candidates.items()
+    }
+
+    assignments: dict[str, str] = {}
+    # 여러 라운드 반복: 충돌 시 다음 후보로 밀기
+    while queues:
+        progress = False
+        for role in list(queues.keys()):
+            cands = queues[role]
+            while cands and cands[0][2] in assignments:
+                cands.pop(0)
+            if not cands:
+                queues.pop(role)
+                progress = True
+                continue
+            # 다음 라운드까지 기다리지 말고 바로 배정
+            winner = cands[0][2]
+            assignments[winner] = role
+            queues.pop(role)
+            progress = True
+        if not progress:
+            break
+    return assignments
 
 
 def _build_search_config(field_map: dict) -> dict:
@@ -194,33 +229,25 @@ def _fetch_users_lookup(nw: NotionWrapper) -> dict[str, str]:
     return lookup
 
 
-def _fetch_relation_lookup(nw: NotionWrapper, data_source_id: str, limit: int = 200) -> dict[str, str]:
-    """data_source의 페이지 목록을 순회하여 {title: page_id} 맵 생성."""
+def _fetch_relation_lookup(nw: NotionWrapper, data_source_id: str) -> dict[str, str]:
+    """data_source의 페이지 목록을 전부 순회하여 {title: page_id} 맵 생성."""
     lookup: dict[str, str] = {}
-    try:
-        result = nw.client.data_sources.query(data_source_id=data_source_id, page_size=100)
-    except Exception:
-        return lookup
-
-    fetched = 0
+    cursor: str | None = None
     while True:
+        kwargs: dict[str, object] = {"data_source_id": data_source_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        try:
+            result = nw.client.data_sources.query(**kwargs)
+        except Exception:
+            break
         for page in result.get("results", []):
             title = _extract_page_title(page)
             if title:
                 lookup[title] = page["id"]
-            fetched += 1
-            if fetched >= limit:
-                return lookup
         if not result.get("has_more"):
             break
-        try:
-            result = nw.client.data_sources.query(
-                data_source_id=data_source_id,
-                page_size=100,
-                start_cursor=result.get("next_cursor"),
-            )
-        except Exception:
-            break
+        cursor = result.get("next_cursor")
     return lookup
 
 
@@ -238,7 +265,7 @@ def _fetch_schema_lookups(nw: NotionWrapper, field_map: dict) -> dict[str, dict[
 
 
 def _merge_lookups(existing: dict, fresh_users: dict, fresh_relations: dict) -> dict:
-    """기존 lookups 위에 새 users/relations를 병합한다."""
+    """기존 lookups 위에 새 users/relations를 병합하고 fetched_at 타임스탬프를 갱신한다."""
     merged = dict(existing or {})
     if fresh_users:
         existing_users = dict(merged.get("users") or {})
@@ -249,6 +276,10 @@ def _merge_lookups(existing: dict, fresh_users: dict, fresh_relations: dict) -> 
         for ds_id, mapping in fresh_relations.items():
             existing_relations[ds_id] = mapping
         merged["relations"] = existing_relations
+    merged["meta"] = {
+        **(merged.get("meta") or {}),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
     return merged
 
 
@@ -276,15 +307,11 @@ def _fetch_schema_as_field_map(nw: NotionWrapper, database_id: str) -> dict | No
             output_json(False, error=f"data_source 스키마 조회 실패: {e}")
             return None
 
-    # 1차 패스: role 추론 (title 등 '하나만' role이 우선 배치되도록 원본 순서 유지)
-    used_roles: set[str] = set()
-    prop_roles: dict[str, str | None] = {}
-    for prop_name, prop_info in raw_props.items():
-        prop_type = prop_info.get("type", "unknown")
-        role = _infer_role(prop_name, prop_type, used_roles)
-        if role:
-            used_roles.add(role)
-        prop_roles[prop_name] = role
+    # 1차 패스: role 스코어링 — 각 role 에 대해 후보를 모은 뒤 짧은 이름을 선호
+    assignments = _assign_roles(_score_candidates(raw_props))
+    prop_roles: dict[str, str | None] = {
+        prop_name: assignments.get(prop_name) for prop_name in raw_props
+    }
 
     # 2차 패스: semantic 키 생성 + 충돌 해결
     field_map: dict = {}
