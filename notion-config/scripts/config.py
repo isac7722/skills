@@ -26,7 +26,7 @@ from pathlib import Path
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
 
-from notion_client import NotionWrapper, get_token, output_json  # noqa: E402
+from notion_wrapper import NotionWrapper, get_token, output_json  # noqa: E402
 from config_loader import load_config, save_config  # noqa: E402
 
 
@@ -63,7 +63,17 @@ def _fetch_schema_as_field_map(nw: NotionWrapper, database_id: str) -> dict | No
         output_json(False, error=f"DB 스키마 조회 실패: {e}")
         return None
 
-    raw_props = db.get("properties", {})
+    data_sources = db.get("data_sources") or []
+    data_source_id = ""
+    raw_props = db.get("properties") or {}
+    if not raw_props and data_sources:
+        data_source_id = data_sources[0].get("id", "")
+        try:
+            ds = nw.client.data_sources.retrieve(data_source_id=data_source_id)
+            raw_props = ds.get("properties") or {}
+        except Exception as e:
+            output_json(False, error=f"data_source 스키마 조회 실패: {e}")
+            return None
     field_map: dict = {}
 
     # 이름 충돌 방지용 카운터
@@ -93,6 +103,7 @@ def _fetch_schema_as_field_map(nw: NotionWrapper, database_id: str) -> dict | No
     return {
         "db_title": db.get("title", [{}])[0].get("plain_text", "Untitled") if db.get("title") else "Untitled",
         "field_map": field_map,
+        "data_source_id": data_source_id,
     }
 
 
@@ -126,6 +137,7 @@ def cmd_add(args: list[str]) -> int:
     # data_types에 추가
     data_types[type_name] = {
         "database_id": database_id,
+        "data_source_id": schema.get("data_source_id", ""),
         "description": schema["db_title"],
         "field_map": schema["field_map"],
     }

@@ -82,10 +82,12 @@ def _test_connection(token: str) -> dict:
         workspace = ""
         if user_type == "bot":
             bot_info = me.get("bot", {})
-            owner = bot_info.get("owner", {})
-            workspace = owner.get("workspace", {}).get("name", "")
+            workspace = bot_info.get("workspace_name", "")
             if not workspace:
-                workspace = bot_info.get("workspace_name", "")
+                owner = bot_info.get("owner", {})
+                ws = owner.get("workspace")
+                if isinstance(ws, dict):
+                    workspace = ws.get("name", "")
 
         return {
             "connected": True,
