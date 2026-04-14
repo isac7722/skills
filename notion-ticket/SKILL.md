@@ -60,7 +60,7 @@ git branch --show-current
 - 세부소속: [세부소속]
 - 소속팀: [소속팀]
 
-📝 본문 (notes):
+📝 본문 (body):
 ## 배경 & 목적
 ...
 
@@ -80,52 +80,50 @@ git branch --show-current
 
 ### Step 4: Notion에 티켓 생성
 
+이 스킬은 **config.yaml 의 `task` 데이터 타입**을 사용합니다. 사전 요구사항:
+
+1. `/notion-setup` 으로 `NOTION_TOKEN` 저장
+2. `/notion-config add task <database_id>` 로 `task` 타입 등록
+   - field_map, search.id_property, users/relations lookup 이 전부 자동 구성됨
+
 사용자가 확인하면, 아래 명령으로 티켓을 생성합니다:
 
 ```bash
-uv run --with notion-client python .claude/skills/notion-ticket/scripts/create_ticket.py <<'TICKET_JSON'
+PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
+  python .claude/skills/notion-ticket/scripts/create_ticket.py <<'TICKET_JSON'
 <JSON>
 TICKET_JSON
 ```
 
-**credentials가 없으면** (exit code 1 + `setup_required: true`):
-1. 사용자에게 `NOTION_TOKEN`과 `NOTION_DATABASE_ID`를 요청
-2. Write 도구로 `.claude/skills/notion-ticket/.env` 파일을 직접 생성 (시크릿이 bash 명령줄에 노출되지 않음):
-   ```
-   NOTION_TOKEN=사용자가_제공한_토큰
-   NOTION_DATABASE_ID=사용자가_제공한_DB_ID
-   ```
-3. 저장 후 다시 티켓 생성 실행
+`setup_required: true` 가 반환되면 위 두 단계를 먼저 수행하도록 사용자에게 안내합니다.
 
-credentials는 `.claude/skills/notion-ticket/.env`에 저장되며 `.gitignore`에 의해 커밋되지 않습니다.
-
-**JSON 형식** (schema.py의 NotionTicket 필드와 일치):
+**JSON 형식** (role 기반 영문 키 사용 — field_map 키와 role 힌트 양쪽 모두 인식):
 ```json
 {
-  "name": "티켓 제목",
+  "title": "티켓 제목",
   "dev_status": "Not started",
   "priority": "중간",
   "assignee": ["담당자 이름"],
   "sub_team": ["세부소속명"],
   "team": ["소속팀명"],
-  "notes": "## 배경 & 목적\n내용...\n\n## 작업 내용\n- [ ] 항목1\n- [ ] 항목2"
+  "body": "## 배경 & 목적\n내용...\n\n## 작업 내용\n- [ ] 항목1\n- [ ] 항목2"
 }
 ```
 
-**필드 값 옵션**:
-- `dev_status` (개발팀진행상태): "Not started" (기본값) | "queue" | "In progress" | "Pending" | "developed" | "Resolved" | "Complete"
-- `priority` (우선순위): "긴급" | "높음" | "중간" (기본값) | "낮음"
-- `assignee` (담당자): 이름 문자열 또는 배열. Notion 워크스페이스 사용자 이름과 매칭됩니다. **비어 있으면 `git config user.name`으로 자동 추론** (`data/mappers.py`의 `GIT_USER_MAP` 참조).
-- `sub_team` (세부소속): 이름 문자열 또는 배열. `data/mappers.py`의 `SUB_TEAM_MAP` 참조.
-- `team` (소속팀): 이름 문자열 또는 배열. `data/mappers.py`의 `TEAM_MAP` 참조.
-- `notes`: 마크다운 문자열 (줄바꿈은 `\n`)
+**필드 값 옵션** (실제 옵션은 config.yaml 의 `task.field_map[*].options` 참고):
+- `dev_status`: "Not started" | "queue" | "In progress" | "Pending" | "developed" | "Resolved" | "Complete"
+- `priority`: "긴급" | "높음" | "중간" | "낮음"
+- `assignee`: 이름 문자열 또는 배열. `lookups.users` 에 매칭되면 API 호출 없이 즉시 resolve. **비어 있으면 `git config user.name` 으로 자동 추론** (`lookups.git_user_map` 또는 git 이름 그대로 fallback).
+- `sub_team`, `team`: 이름 문자열 또는 배열. `lookups.relations.<target_data_source_id>` 에서 자동 resolve.
+- `body`: 마크다운 문자열 (줄바꿈은 `\n`). `notes` 로 넣어도 호환됨.
 
 ### Step 4-B: 기존 티켓 업데이트
 
 업데이트 모드일 때, 아래 명령으로 실행합니다:
 
 ```bash
-uv run --with notion-client python .claude/skills/notion-ticket/scripts/create_ticket.py --update AHD-699 <<'TICKET_JSON'
+PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
+  python .claude/skills/notion-ticket/scripts/create_ticket.py --update AHD-699 <<'TICKET_JSON'
 <JSON>
 TICKET_JSON
 ```
@@ -135,12 +133,12 @@ TICKET_JSON
 {
   "dev_status": "In progress",
   "assignee": ["담당자 이름"],
-  "notes": "## 작업 내용\n- [x] 완료된 항목\n- [ ] 남은 항목"
+  "body": "## 작업 내용\n- [x] 완료된 항목\n- [ ] 남은 항목"
 }
 ```
 
-- `name`, `dev_status`, `priority`, `assignee`, `sub_team`, `team`: 해당 필드만 업데이트
-- `notes`: 기존 본문을 **전체 교체** (기존 블록 삭제 → 새 블록 추가)
+- role 이 부여된 필드들은 영문 키로 호출 가능 (`title`, `status`, `assignee`, `priority`, `due_date` 등)
+- `body`: 기존 본문을 **전체 교체** (기존 블록 삭제 → 새 블록 추가)
 
 ### Step 5: 결과 보고
 
@@ -179,4 +177,4 @@ API 실패 시 아래 형식으로 출력합니다:
 - **한 번에 질문**: 부족한 정보가 여러 개면 한 번에 모아서 질문
 - **추론 가능하면 채움**: 대화 맥락에서 합리적으로 유추 가능한 항목은 질문 없이 채워 넣되, 추론했음을 명시
 - **확인 후 생성**: 반드시 사용자 확인을 받은 후 Notion API를 호출
-- **JSON escape**: notes 필드의 줄바꿈은 반드시 `\n`으로 이스케이프, 쌍따옴표는 `\"`로 이스케이프. heredoc으로 전달하므로 shell 특수문자 걱정 불필요
+- **JSON escape**: body 필드의 줄바꿈은 반드시 `\n`으로 이스케이프, 쌍따옴표는 `\"`로 이스케이프. heredoc으로 전달하므로 shell 특수문자 걱정 불필요

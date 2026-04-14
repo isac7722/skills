@@ -207,10 +207,18 @@ class NotionWrapper:
         database_id: str,
         properties: dict,
         children: list[dict] | None = None,
+        data_source_id: str | None = None,
     ) -> dict:
-        """DB에 새 페이지를 생성한다."""
+        """DB에 새 페이지를 생성한다.
+
+        data_source_id 가 제공되면 parent 로 사용한다 (다중 data_source DB 지원).
+        """
+        if data_source_id:
+            parent: dict[str, Any] = {"data_source_id": data_source_id}
+        else:
+            parent = {"database_id": database_id}
         kwargs: dict[str, Any] = {
-            "parent": {"database_id": database_id},
+            "parent": parent,
             "properties": properties,
         }
         if children:
