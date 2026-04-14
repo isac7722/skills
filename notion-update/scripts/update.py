@@ -35,7 +35,7 @@ _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
 
 from config_loader import load_config, get_type_config, get_field_map, get_database_id, get_lookups
-from notion_client import NotionWrapper, build_properties, output_json
+from notion_wrapper import NotionWrapper, build_properties, output_json
 from markdown_parser import parse_markdown_to_children
 
 

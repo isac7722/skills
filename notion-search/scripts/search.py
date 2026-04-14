@@ -36,7 +36,7 @@ from typing import Any
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
 
-from notion_client import NotionWrapper, output_json  # noqa: E402
+from notion_wrapper import NotionWrapper, output_json  # noqa: E402
 from config_loader import (  # noqa: E402
     load_config,
     get_type_config,
