@@ -256,6 +256,27 @@ def main() -> int:
     display_fields = search_cfg.get("display_fields")
     limit = min(args.limit, 100)
 
+    data_source_id = type_config.get("data_source_id")
+
+    def _run_query(filter_obj: dict | None) -> list[dict]:
+        """data_source_id가 있으면 data_sources.query, 없으면 databases.query."""
+        sorts = _build_sorts(args.sort)
+        if data_source_id:
+            result = nw.query_data_source(
+                data_source_id=data_source_id,
+                filter=filter_obj,
+                sorts=sorts,
+                page_size=limit,
+            )
+        else:
+            result = nw.query_database(
+                database_id=db_id,
+                filter=filter_obj,
+                sorts=sorts,
+                page_size=limit,
+            )
+        return result.get("results", [])
+
     try:
         # 1) Unique ID 검색
         if args.unique_id:
@@ -269,24 +290,12 @@ def main() -> int:
             except json.JSONDecodeError as e:
                 output_json(False, error=f"필터 JSON 파싱 실패: {e}")
                 return 3
-            result = nw.query_database(
-                database_id=db_id,
-                filter=filter_obj,
-                sorts=_build_sorts(args.sort),
-                page_size=limit,
-            )
-            pages = result.get("results", [])
+            pages = _run_query(filter_obj)
 
         # 3) 키워드 검색
         else:
             keyword_filter = _build_keyword_filter(args.keyword, field_map)
-            result = nw.query_database(
-                database_id=db_id,
-                filter=keyword_filter,
-                sorts=_build_sorts(args.sort),
-                page_size=limit,
-            )
-            pages = result.get("results", [])
+            pages = _run_query(keyword_filter)
 
     except Exception as e:
         output_json(False, error=f"Notion API 오류: {e}")

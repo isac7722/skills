@@ -331,9 +331,19 @@ class NotionWrapper:
         self,
         data_source_id: str,
         filter: dict | None = None,
+        sorts: list[dict] | None = None,
+        page_size: int = 100,
+        start_cursor: str | None = None,
     ) -> dict:
-        """data_sources.query — unique_id 등으로 검색."""
-        kwargs: dict[str, Any] = {"data_source_id": data_source_id}
+        """data_sources.query — 최신 notion-client의 DB 쿼리 엔드포인트."""
+        kwargs: dict[str, Any] = {
+            "data_source_id": data_source_id,
+            "page_size": page_size,
+        }
         if filter:
             kwargs["filter"] = filter
+        if sorts:
+            kwargs["sorts"] = sorts
+        if start_cursor:
+            kwargs["start_cursor"] = start_cursor
         return self.client.data_sources.query(**kwargs)
