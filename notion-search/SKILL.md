@@ -15,6 +15,7 @@ config.yaml에 정의된 데이터베이스 매핑을 기반으로, Notion DB에
 
 ## 사전 조건
 
+- **필수 의존성**: `notion-shared` 스킬이 sibling으로 설치되어 있어야 합니다 (`npx skills add aptimizer-co/skills/notion-shared`). 없으면 import 오류로 동작하지 않습니다.
 - `notion-setup` 스킬로 NOTION_TOKEN이 설정되어 있어야 합니다 (`~/.notion-skills/.env`).
 - `notion-config` 스킬로 최소 1개 DB 매핑이 등록되어 있어야 합니다 (`~/.notion-skills/config.yaml`).
 - 설정이 없으면 사용자에게 해당 스킬을 먼저 실행하라고 안내합니다.

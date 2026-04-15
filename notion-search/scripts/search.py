@@ -34,7 +34,15 @@ from typing import Any
 
 # notion-shared 모듈 경로 추가
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
+_SHARED_DIR = _SKILLS_DIR / "notion-shared"
+if not _SHARED_DIR.is_dir():
+    sys.stderr.write(
+        "notion-shared 스킬이 설치되어 있지 않습니다 "
+        f"(expected: {_SHARED_DIR}).\n"
+        "`npx skills add aptimizer-co/skills@notion-shared` 로 설치하세요.\n"
+    )
+    sys.exit(1)
+sys.path.insert(0, str(_SHARED_DIR))
 
 from notion_wrapper import NotionWrapper, output_json  # noqa: E402
 from config_loader import (  # noqa: E402

@@ -36,9 +36,22 @@ from pathlib import Path
 
 # notion-shared 를 import path에 추가
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_SKILLS_DIR / "notion-shared"))
+_SHARED_DIR = _SKILLS_DIR / "notion-shared"
+_UPDATE_SCRIPTS_DIR = _SKILLS_DIR / "notion-update" / "scripts"
+for _dep_name, _dep_path in (
+    ("notion-shared", _SHARED_DIR),
+    ("notion-update", _UPDATE_SCRIPTS_DIR),
+):
+    if not _dep_path.is_dir():
+        sys.stderr.write(
+            f"{_dep_name} 스킬이 설치되어 있지 않습니다 "
+            f"(expected: {_dep_path}).\n"
+            f"`npx skills add aptimizer-co/skills@{_dep_name}` 로 설치하세요.\n"
+        )
+        sys.exit(1)
+sys.path.insert(0, str(_SHARED_DIR))
 # notion-update 의 헬퍼들을 재사용한다 (role routing, lookup resolver)
-sys.path.insert(0, str(_SKILLS_DIR / "notion-update" / "scripts"))
+sys.path.insert(0, str(_UPDATE_SCRIPTS_DIR))
 
 from config_loader import (  # noqa: E402
     load_config,

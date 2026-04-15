@@ -15,6 +15,7 @@ Notion 스킬에서 사용할 데이터 타입 매핑을 관리합니다.
 
 ## 사전 조건
 
+- **필수 의존성**: `notion-shared` 스킬이 sibling으로 설치되어 있어야 합니다 (`npx skills add aptimizer-co/skills/notion-shared`). 없으면 import 오류로 동작하지 않습니다.
 - `notion-setup` 스킬로 초기 설정이 완료되어 있어야 합니다 (`~/.notion-skills/.env` 존재).
 - 설정이 없으면 사용자에게 `/notion-setup`을 먼저 실행하라고 안내합니다.
 - pyyaml 패키지가 필요합니다 (`uv run --with pyyaml`).

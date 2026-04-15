@@ -11,6 +11,12 @@ description: >
 
 대화 중 쌓인 맥락을 분석하여 구조화된 티켓을 Notion에 직접 생성하거나, 기존 티켓을 업데이트합니다.
 
+## 사전 조건
+
+- **필수 의존성**: `notion-shared` 스킬이 sibling으로 설치되어 있어야 합니다 (`npx skills add aptimizer-co/skills/notion-shared`). 없으면 import 오류로 동작하지 않습니다.
+- 내부적으로 `notion-update` 스킬의 헬퍼(role routing, lookup resolver)도 재사용하므로 함께 설치되어 있어야 합니다.
+- `notion-setup` 으로 NOTION_TOKEN이 설정되고, `notion-config` 로 티켓 DB 매핑이 등록되어 있어야 합니다.
+
 ## 생성 vs 업데이트 판단
 
 - **현재 git 브랜치**가 `feat/AHD-123`, `fix/AHD-456` 등 `AHD-숫자` 패턴을 포함하면 → **업데이트 모드** (해당 Task ID의 기존 티켓 업데이트)

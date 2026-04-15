@@ -11,7 +11,12 @@
 | [`create-commit-message`](./create-commit-message/SKILL.md) | Conventional Commits 기반 커밋 메시지 생성 | `커밋 메시지 만들어줘` |
 | [`create-pr`](./create-pr/SKILL.md) | 셀프 리뷰 + 구조화된 본문의 고품질 PR 생성 | `PR 만들어줘` |
 | [`enrich-schema`](./enrich-schema/SKILL.md) | DRF 뷰에 `@extend_schema()` 자동 추가 | `API 문서 보강해줘` |
+| [`notion-setup`](./notion-setup/SKILL.md) | Notion API 토큰 설정 및 연결 검증 | `노션 설정해줘` |
+| [`notion-config`](./notion-config/SKILL.md) | Notion DB 매핑/프로퍼티 설정 관리 | `노션 DB 설정` |
+| [`notion-update`](./notion-update/SKILL.md) | config.yaml 기반 Notion 페이지 생성/업데이트 | `노션에 추가해줘` |
+| [`notion-search`](./notion-search/SKILL.md) | Notion DB 키워드/필터/unique_id 검색 | `노션에서 찾아줘` |
 | [`notion-ticket`](./notion-ticket/SKILL.md) | 대화 맥락 기반 Notion 티켓 생성/업데이트 | `노션 티켓 만들어줘` |
+| [`notion-shared`](./notion-shared/SKILL.md) | 위 Notion 스킬들이 공유하는 내부 라이브러리 (필수 의존성) | — |
 
 ## 설치
 
@@ -27,6 +32,26 @@ npx skills add aptimizer-co/skills@create-commit-message
 # 글로벌 설치 (모든 프로젝트에서 사용)
 npx skills add aptimizer-co/skills -g
 ```
+
+### Notion 스킬 설치 시 주의
+
+`notion-update`, `notion-ticket`, `notion-search`, `notion-config`는 **`notion-shared`를 sibling 디렉토리로 필요로 합니다.** 개별 설치 시 반드시 함께 설치하세요.
+
+```bash
+# 예: notion-update 사용 시
+npx skills add aptimizer-co/skills@notion-shared aptimizer-co/skills@notion-update
+
+# 전체 Notion 스택
+npx skills add \
+  aptimizer-co/skills@notion-shared \
+  aptimizer-co/skills@notion-setup \
+  aptimizer-co/skills@notion-config \
+  aptimizer-co/skills@notion-update \
+  aptimizer-co/skills@notion-search \
+  aptimizer-co/skills@notion-ticket
+```
+
+`notion-shared`가 없으면 `from config_loader import ...` 등에서 `ModuleNotFoundError`가 발생합니다.
 
 ## 사용법
 
