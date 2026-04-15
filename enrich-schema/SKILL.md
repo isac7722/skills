@@ -623,6 +623,61 @@ class UserView(...):
 
 3. validation 에러가 있으면 보고하고 수정합니다.
 
+### Step 7: Error Code Registry Sync
+
+이번 작업에서 수집/변경된 CustomError(5자리 `status_code`)가 `docs/error-codes.md`에 일관되게 반영되도록 자동 동기화합니다. `docs/error-codes.md`는 **생성물**이며, 사람이 직접 편집하지 않습니다.
+
+#### 7-1. 스크립트 존재 확인 & Bootstrap
+
+```bash
+test -f scripts/sync_error_docs.py
+```
+
+- **있으면** → Step 7-2로 진행
+- **없으면** → 사용자에게 bootstrap 여부 질문:
+  - 승인 시: 이 스킬 저장소의 `templates/sync_error_docs.py` 를 타겟 프로젝트의 `scripts/sync_error_docs.py` 로 복사
+  - 복사 경로는 스킬 설치 위치에 따라 다름. 일반적으로: `~/.claude/skills/enrich-schema/templates/sync_error_docs.py` → `scripts/sync_error_docs.py`
+  - 최초 실행 시 스크립트가 기존 `docs/error-codes.md` 표에서 도메인 이름을 역추출해 `scripts/error_domains.yaml` seed 파일을 자동 생성
+
+#### 7-2. Dry-run Check
+
+```bash
+python scripts/sync_error_docs.py --check
+```
+
+- **exit 0 + no diff** → "✓ Error code registry 일관성 OK" 로그만 남기고 종료
+- **exit 1** → 스크립트가 stdout에 unified diff, stderr에 violations 리포트 출력
+
+#### 7-3. Violations 처리 (있는 경우)
+
+다음 위반은 **코드 수정으로만** 해결 가능합니다. 문서 동기화를 중단하고 사용자에게 수정을 요청:
+
+- 5자리가 아닌 `code` (`NOT_5_DIGIT`)
+- 중복된 `code` (`DUPLICATE`)
+- 파일 간 범위 겹침 (`RANGE_OVERLAP`)
+
+위반 요약을 사용자에게 보여주고, 수정 후 다시 `/enrich-schema` 를 돌리거나 `python scripts/sync_error_docs.py --check` 를 직접 실행하도록 안내합니다.
+
+#### 7-4. Diff 처리 (Violation 없을 때)
+
+1. 스크립트가 출력한 unified diff를 사용자에게 그대로 보여줍니다 (추가된 code, 변경된 range, 신규 도메인)
+2. 새로 등장한 prefix는 `Unknown (2XXxx)` placeholder로 표시됩니다 — 이 경우 `scripts/error_domains.yaml` 에 해당 prefix 이름을 채울 것을 안내
+3. 사용자 승인 시:
+   ```bash
+   python scripts/sync_error_docs.py --write
+   ```
+4. `git diff docs/error-codes.md` 로 실제 반영 확인
+
+#### 7-5. 최종 보고
+
+enrich-schema 작업 종료 전 다음을 요약:
+
+- 추가된 error code 개수 & code 목록
+- 변경된 range (예: `22000~22199` → `22000~22299`)
+- 신규 도메인 (yaml 채울 것 안내)
+
+> **주의**: `docs/error-codes.md` 를 수동 편집하지 마세요. 반드시 `CustomError` 정의를 통해서만 변경되어야 하며, Step 7이 이를 강제합니다.
+
 ## Important Rules
 
 - **언어**: 모든 `summary`와 `description` 텍스트는 반드시 **한국어**로 작성
@@ -633,6 +688,7 @@ class UserView(...):
 - **동적 탐색 우선**: 항상 프로젝트 구조를 동적으로 탐색. 파일 경로, 태그명, 에러 코드를 하드코딩하지 않음
 - **에러 응답**: 에러 응답 스키마에 `OpenApiTypes.OBJECT` 사용 (400, 401, 403, 404, 409 등)
 - **Soft delete**: soft delete 패턴 감지 시 (Step 2-5) DELETE 엔드포인트 description에 명시
+- **Error code registry 동기화**: 작업 마무리 시 반드시 Step 7을 수행. `docs/error-codes.md`는 생성물이므로 **직접 편집 금지**, 오직 `CustomError` 정의와 `scripts/error_domains.yaml` 을 통해서만 변경
 
 ### OpenAPI 모듈 분리 규칙 (MUST)
 
