@@ -44,13 +44,14 @@ if not _SHARED_DIR.is_dir():
     sys.exit(1)
 sys.path.insert(0, str(_SHARED_DIR))
 
-from notion_wrapper import NotionWrapper, output_json  # noqa: E402
+from notion_wrapper import NotionWrapper, get_token_for_env, output_json  # noqa: E402
 from config_loader import (  # noqa: E402
     load_config,
     get_type_config,
     get_database_id,
     get_field_map,
     get_search_config,
+    get_token_env,
 )
 
 
@@ -246,11 +247,22 @@ def main() -> int:
         output_json(False, error=str(e))
         return 1
 
-    # Notion 클라이언트 초기화
+    # Notion 클라이언트 초기화 (data_type별 token_env 우선, 없으면 NOTION_TOKEN 폴백)
+    token_env = get_token_env(config, args.db)
+    token = get_token_for_env(token_env) if token_env else None
     try:
-        nw = NotionWrapper()
+        nw = NotionWrapper(token=token)
     except RuntimeError as e:
         output_json(False, error=str(e))
+        return 1
+    if not nw.token:
+        if token_env:
+            output_json(
+                False,
+                error=f"{token_env} 환경변수가 설정되지 않았습니다. ~/.notion-skills/.env를 확인하세요",
+            )
+        else:
+            output_json(False, error="NOTION_TOKEN이 설정되지 않았습니다")
         return 1
 
     display_fields = search_cfg.get("display_fields")

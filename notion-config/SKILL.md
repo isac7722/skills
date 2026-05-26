@@ -43,6 +43,27 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
    - `field_map[field_name] = {property: "원래이름", type: "select/title/...", options: [...]}`
 4. 첫 등록이면 `default_type`으로 자동 설정됩니다.
 
+**별도 Notion Integration 토큰을 사용하려면** (`--token-env`, `--token-value`):
+
+기본적으로 모든 data_type은 `NOTION_TOKEN`을 공유합니다. 특정 DB가 **별도 Integration**을 통해 연결돼 있다면 `--token-env`로 해당 환경변수를 가리키도록 등록할 수 있습니다.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
+  python .claude/skills/notion-config/scripts/config.py \
+  add tickets <database_id> \
+  --token-env TICKETS_NOTION_TOKEN \
+  --token-value secret_xxxxx \
+  --yes
+```
+
+- `--token-env NAME`: 이 data_type 전용 환경변수명. config.yaml에 `token_env: NAME`으로 저장됩니다 (토큰 값 자체는 저장되지 않음).
+- `--token-value SECRET`: `.env`에 `NAME=SECRET`을 자동 upsert합니다 (`chmod 600` 유지).
+  - 생략하면 `~/.notion-skills/.env`에 이미 등록돼 있어야 합니다.
+  - 키는 있지만 값이 다르면 `--force-env`로 덮어쓰기.
+- 보안 주의: `--token-value`는 셸 히스토리에 남으므로, 가능하면 `.env`에 미리 추가한 뒤 `--token-env`만 전달하는 방식을 권장합니다.
+
+등록 후 `notion-update` / `notion-search` / `notion-ticket`은 자동으로 해당 data_type에 한해 지정된 환경변수에서 토큰을 읽고, 다른 타입은 기존처럼 `NOTION_TOKEN`을 사용합니다.
+
 **config.yaml 저장 형식**:
 ```yaml
 version: "1"

@@ -59,8 +59,14 @@ from config_loader import (  # noqa: E402
     get_field_map,
     get_database_id,
     get_lookups,
+    get_token_env,
 )
-from notion_wrapper import NotionWrapper, build_properties, output_json  # noqa: E402
+from notion_wrapper import (  # noqa: E402
+    NotionWrapper,
+    build_properties,
+    get_token_for_env,
+    output_json,
+)
 from markdown_parser import parse_markdown_to_children  # noqa: E402
 from update import (  # noqa: E402
     _route_by_role,
@@ -199,14 +205,24 @@ def main() -> int:
     field_map = get_field_map(config, args.type_name)
     lookups = get_lookups(config)
 
-    nw = NotionWrapper()
+    # data_type별 token_env 우선, 없으면 NOTION_TOKEN 폴백
+    token_env = get_token_env(config, args.type_name)
+    token = get_token_for_env(token_env) if token_env else None
+    nw = NotionWrapper(token=token)
     if not nw.token:
-        output_json(
-            False,
-            error="NOTION_TOKEN 이 설정되지 않았습니다",
-            setup_required=True,
-            hint="/notion-setup 을 먼저 실행하세요",
-        )
+        if token_env:
+            output_json(
+                False,
+                error=f"{token_env} 환경변수가 설정되지 않았습니다. ~/.notion-skills/.env를 확인하세요",
+                setup_required=True,
+            )
+        else:
+            output_json(
+                False,
+                error="NOTION_TOKEN 이 설정되지 않았습니다",
+                setup_required=True,
+                hint="/notion-setup 을 먼저 실행하세요",
+            )
         return 1
 
     data = _read_stdin_json()

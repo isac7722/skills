@@ -120,6 +120,18 @@ def get_database_id(config: dict[str, Any], type_name: str | None = None) -> str
     return db_id
 
 
+def get_token_env(config: dict[str, Any], type_name: str | None = None) -> str | None:
+    """데이터 타입의 token_env(환경변수명)를 반환한다.
+
+    None이면 호출부는 기본 NOTION_TOKEN으로 폴백한다.
+    """
+    tc = get_type_config(config, type_name)
+    value = tc.get("token_env")
+    if value is None:
+        return None
+    return str(value)
+
+
 def get_field_map(config: dict[str, Any], type_name: str | None = None) -> dict[str, Any]:
     """데이터 타입의 field_map을 notion_client.build_properties 호환 형식으로 반환한다.
 

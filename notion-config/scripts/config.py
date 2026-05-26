@@ -37,7 +37,13 @@ if not _SHARED_DIR.is_dir():
     sys.exit(1)
 sys.path.insert(0, str(_SHARED_DIR))
 
-from notion_wrapper import NotionWrapper, get_token, output_json  # noqa: E402
+from notion_wrapper import (  # noqa: E402
+    ENV_PATH,
+    NotionWrapper,
+    get_token,
+    get_token_for_env,
+    output_json,
+)
 from config_loader import load_config, save_config  # noqa: E402
 from semantic_dictionary import load_semantic_dictionary  # noqa: E402
 
@@ -62,6 +68,43 @@ def _require_token() -> str:
         )
         sys.exit(1)
     return token
+
+
+def _upsert_env_line(
+    env_path: Path, key: str, value: str, *, allow_overwrite: bool
+) -> str:
+    """~/.notion-skills/.env에 KEY=VALUE를 추가하거나 갱신한다.
+
+    Returns:
+        "added" | "updated" | "unchanged"
+    Raises:
+        ValueError: allow_overwrite=False인데 동일 키가 다른 값으로 이미 존재
+    """
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    for i, raw in enumerate(lines):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        existing_key, _, existing_value = stripped.partition("=")
+        if existing_key.strip() == key:
+            if existing_value.strip() == value:
+                return "unchanged"
+            if not allow_overwrite:
+                raise ValueError(
+                    f"{key} 가 .env에 이미 존재합니다 (다른 값). "
+                    f"덮어쓰려면 --force-env 를 사용하세요."
+                )
+            lines[i] = f"{key}={value}"
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            env_path.chmod(0o600)
+            return "updated"
+    lines.append(f"{key}={value}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env_path.chmod(0o600)
+    return "added"
 
 
 def _slugify_field_name(prop_name: str) -> str:
@@ -387,12 +430,30 @@ def cmd_add(args: list[str]) -> int:
         action="store_true",
         help="기존 type_name이 등록돼 있어도 덮어쓴다",
     )
+    parser.add_argument(
+        "--token-env",
+        metavar="NAME",
+        help="이 data_type 전용 환경변수명 (예: TICKETS_NOTION_TOKEN). 미지정 시 NOTION_TOKEN 사용",
+    )
+    parser.add_argument(
+        "--token-value",
+        metavar="SECRET",
+        help="--token-env 지정 시 .env에 함께 저장할 토큰 값. 생략 시 .env에 이미 존재해야 함",
+    )
+    parser.add_argument(
+        "--force-env",
+        action="store_true",
+        help="--token-env가 .env에 다른 값으로 이미 존재하면 덮어쓴다",
+    )
     try:
         ns = parser.parse_args(args)
     except SystemExit:
         output_json(
             False,
-            error="사용법: config.py add <type_name> <database_id> [--yes] [--force]",
+            error=(
+                "사용법: config.py add <type_name> <database_id> [--yes] [--force] "
+                "[--token-env NAME [--token-value SECRET] [--force-env]]"
+            ),
         )
         return 3
 
@@ -411,8 +472,35 @@ def cmd_add(args: list[str]) -> int:
         )
         return 3
 
-    _require_token()
-    nw = NotionWrapper()
+    # 토큰 확보: --token-env 지정 시 해당 env에서, 아니면 NOTION_TOKEN
+    env_action: str | None = None
+    if ns.token_env:
+        if ns.token_value:
+            try:
+                env_action = _upsert_env_line(
+                    ENV_PATH,
+                    ns.token_env,
+                    ns.token_value,
+                    allow_overwrite=ns.force_env,
+                )
+            except ValueError as e:
+                output_json(False, error=str(e))
+                return 3
+        token = get_token_for_env(ns.token_env)
+        if not token:
+            output_json(
+                False,
+                error=f"{ns.token_env} 환경변수가 비어 있습니다.",
+                hint=(
+                    f"--token-value <SECRET> 를 함께 전달하거나 "
+                    f"~/.notion-skills/.env에 {ns.token_env}=... 를 추가하세요."
+                ),
+            )
+            return 1
+    else:
+        token = _require_token()
+
+    nw = NotionWrapper(token=token)
     schema = _fetch_schema_as_field_map(nw, database_id)
     if schema is None:
         return 2
@@ -423,6 +511,8 @@ def cmd_add(args: list[str]) -> int:
         "description": schema["db_title"],
         "field_map": schema["field_map"],
     }
+    if ns.token_env:
+        new_entry["token_env"] = ns.token_env
     if schema.get("search"):
         new_entry["search"] = schema["search"]
 
@@ -454,6 +544,8 @@ def cmd_add(args: list[str]) -> int:
             search=schema.get("search", {}),
             lookups_to_add=lookups_summary,
             would_overwrite=already_exists,
+            token_env=ns.token_env,
+            env_action=env_action,
             hint="확정: config.py add <type_name> <database_id> --yes"
             + (" --force" if already_exists else ""),
             preview=new_entry,
@@ -484,6 +576,8 @@ def cmd_add(args: list[str]) -> int:
         lookups_added=lookups_summary,
         overwrote=already_exists,
         is_default=(config.get("default_type") == type_name),
+        token_env=ns.token_env,
+        env_action=env_action,
     )
     return 0
 
@@ -595,6 +689,7 @@ def cmd_list(_args: list[str]) -> int:
             "database_id": type_info.get("database_id", ""),
             "description": type_info.get("description", ""),
             "is_default": type_name == default_type,
+            "token_env": type_info.get("token_env"),
             "fields": field_summary,
         })
 
@@ -668,6 +763,7 @@ def cmd_show(args: list[str]) -> int:
         is_default=(config.get("default_type") == type_name),
         database_id=type_info.get("database_id", ""),
         description=type_info.get("description", ""),
+        token_env=type_info.get("token_env"),
         field_map=type_info.get("field_map", {}),
         search=type_info.get("search", {}),
     )

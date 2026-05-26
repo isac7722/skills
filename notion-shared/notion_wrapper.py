@@ -47,6 +47,12 @@ def get_token() -> str | None:
     return os.environ.get("NOTION_TOKEN")
 
 
+def get_token_for_env(env_name: str) -> str | None:
+    """주어진 환경변수에서 Notion 토큰을 반환한다. 없으면 None."""
+    load_env()
+    return os.environ.get(env_name)
+
+
 def output_json(success: bool, **kwargs: Any) -> None:
     """표준 JSON 응답을 stdout으로 출력한다."""
     result = {"success": success, **kwargs}

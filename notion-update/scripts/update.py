@@ -45,8 +45,20 @@ if not _SHARED_DIR.is_dir():
     sys.exit(1)
 sys.path.insert(0, str(_SHARED_DIR))
 
-from config_loader import load_config, get_type_config, get_field_map, get_database_id, get_lookups
-from notion_wrapper import NotionWrapper, build_properties, output_json
+from config_loader import (
+    load_config,
+    get_type_config,
+    get_field_map,
+    get_database_id,
+    get_lookups,
+    get_token_env,
+)
+from notion_wrapper import (
+    NotionWrapper,
+    build_properties,
+    get_token_for_env,
+    output_json,
+)
 from markdown_parser import parse_markdown_to_children
 
 
@@ -366,10 +378,23 @@ def main() -> int:
     field_map = get_field_map(config, type_name)
     lookups = get_lookups(config)
 
-    # Notion 클라이언트 초기화
-    nw = NotionWrapper()
+    # Notion 클라이언트 초기화 (data_type별 token_env 우선, 없으면 NOTION_TOKEN 폴백)
+    token_env = get_token_env(config, type_name)
+    token = get_token_for_env(token_env) if token_env else None
+    nw = NotionWrapper(token=token)
     if not nw.token:
-        output_json(False, error="NOTION_TOKEN이 설정되지 않았습니다. notion-setup을 먼저 실행하세요", setup_required=True)
+        if token_env:
+            output_json(
+                False,
+                error=f"{token_env} 환경변수가 설정되지 않았습니다. ~/.notion-skills/.env를 확인하세요",
+                setup_required=True,
+            )
+        else:
+            output_json(
+                False,
+                error="NOTION_TOKEN이 설정되지 않았습니다. notion-setup을 먼저 실행하세요",
+                setup_required=True,
+            )
         return 1
 
     # 데이터 읽기
