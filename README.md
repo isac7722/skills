@@ -16,6 +16,7 @@
 | [`notion-update`](./notion-update/SKILL.md) | config.yaml 기반 Notion 페이지 생성/업데이트 | `노션에 추가해줘` |
 | [`notion-search`](./notion-search/SKILL.md) | Notion DB 키워드/필터/unique_id 검색 | `노션에서 찾아줘` |
 | [`notion-ticket`](./notion-ticket/SKILL.md) | 대화 맥락 기반 Notion 티켓 생성/업데이트 | `노션 티켓 만들어줘` |
+| [`tickets-notion`](./tickets-notion/SKILL.md) | 야구 티켓 예매 이미지를 파싱해 Notion `tickets` DB에 저장 | `티켓 이미지 저장` |
 | [`notion-shared`](./notion-shared/SKILL.md) | 위 Notion 스킬들이 공유하는 내부 라이브러리 (필수 의존성) | — |
 
 ## 설치
@@ -48,10 +49,29 @@ npx skills add \
   aptimizer-co/skills@notion-config \
   aptimizer-co/skills@notion-update \
   aptimizer-co/skills@notion-search \
-  aptimizer-co/skills@notion-ticket
+  aptimizer-co/skills@notion-ticket \
+  aptimizer-co/skills@tickets-notion
 ```
 
 `notion-shared`가 없으면 `from config_loader import ...` 등에서 `ModuleNotFoundError`가 발생합니다.
+
+### Notion 멀티 토큰 (data_type별 별도 Integration)
+
+기본적으로 모든 data_type은 `NOTION_TOKEN` 한 개를 공유합니다. 일부 DB가 **별도 Notion Integration**으로 연결되어 있다면 `notion-config add` 시 `--token-env`로 환경변수명을 지정할 수 있습니다.
+
+```bash
+# tickets DB가 별도 Integration이라면
+PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
+  python .claude/skills/notion-config/scripts/config.py \
+  add tickets <database_id> \
+  --token-env TICKETS_NOTION_TOKEN \
+  --token-value secret_xxxxx \
+  --yes
+```
+
+- `--token-env NAME`: data_type 전용 환경변수명. `config.yaml`에 `token_env: NAME`으로만 저장됩니다 (토큰 값 자체는 저장 X).
+- `--token-value SECRET`: 동시에 `~/.notion-skills/.env`에 `NAME=SECRET`를 upsert (권한 600 유지). 셸 히스토리에 남으니, 가능하면 `.env`에 사전 추가 후 `--token-env`만 전달하세요.
+- `notion-update`/`notion-search`/`notion-ticket`은 자동으로 해당 data_type에 한해 지정된 토큰을 사용하고, 다른 타입은 기존처럼 `NOTION_TOKEN`을 사용합니다 (backward compatible).
 
 ## 사용법
 
@@ -93,6 +113,19 @@ DRF + drf-spectacular 프로젝트에서 `@extend_schema()` 데코레이터를 �
 ```
 # "노션 티켓 만들어줘" 또는 /notion-ticket
 ```
+
+### tickets-notion
+
+야구 티켓 예매 스크린샷을 첨부하면 이미지에서 경기·좌석·결제 정보를 추출하고, 사용자 확인을 거쳐 Notion `tickets` DB에 페이지로 저장합니다. DB에 없는 부가 정보(예매일시·취소 가능 시간·수령방법·좌석 상세)는 페이지 본문 markdown으로 자동 기록됩니다.
+
+```
+# 이미지 첨부 후 "/tickets-notion" 또는 "티켓 이미지 저장"
+```
+
+- 고정 title 템플릿: `{예매번호} | {홈팀}vs{상대팀} {MM-DD} | {블럭}블럭 {열}열 {좌석}`
+- formula 필드(수익률·티켓_단가·티켓_상태 등)는 자동 제외
+- select 옵션 불일치 시 `AskUserQuestion`으로 사용자 결정
+- 사전 요구: `notion-config add tickets ...`로 등록, 별도 토큰 사용 시 위 멀티 토큰 안내 참고
 
 ## 팀 협업
 

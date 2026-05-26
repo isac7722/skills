@@ -65,6 +65,10 @@ AI: ✅ 연결 성공! 워크스페이스: My Workspace, 사용자: John Doe
 - 토큰: `~/.notion-skills/.env` (`NOTION_TOKEN=...`)
 - 이 파일은 모든 Notion 스킬(notion-config, notion-update, notion-search)에서 공유됩니다.
 
+## 멀티 토큰 (data_type별 별도 Integration)
+
+이 스킬은 기본 `NOTION_TOKEN`만 다룹니다. 일부 DB가 **별도 Integration**으로 연결되는 경우(예: `tickets` DB가 다른 토큰을 사용), 추가 토큰은 `notion-config add` 시 `--token-env`/`--token-value` 옵션으로 등록합니다. 자세한 사용법은 `notion-config` SKILL.md 참조.
+
 ## Important Rules
 
 - **시크릿 보호**: 토큰은 반드시 stdin JSON으로 전달 (bash 명령줄에 노출 금지)

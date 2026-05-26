@@ -16,6 +16,7 @@ description: >
 - **필수 의존성**: `notion-shared` 스킬이 sibling으로 설치되어 있어야 합니다 (`npx skills add aptimizer-co/skills/notion-shared`). 없으면 import 오류로 동작하지 않습니다.
 - 내부적으로 `notion-update` 스킬의 헬퍼(role routing, lookup resolver)도 재사용하므로 함께 설치되어 있어야 합니다.
 - `notion-setup` 으로 NOTION_TOKEN이 설정되고, `notion-config` 로 티켓 DB 매핑이 등록되어 있어야 합니다.
+  - 티켓 DB가 별도 Integration을 쓰도록 `notion-config add --token-env <NAME>`로 등록된 경우, 해당 환경변수의 토큰을 자동 사용합니다 (없으면 NOTION_TOKEN 폴백).
 
 ## 생성 vs 업데이트 판단
 
