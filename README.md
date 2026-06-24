@@ -8,6 +8,7 @@
 
 | 스킬 | 설명 | 트리거 예시 |
 |------|------|------------|
+| [`check-review`](./check-review/SKILL.md) | 리뷰어 코멘트를 코드 근거로 검증하고 컨펌용 수정 계획 작성 | `/check-review` |
 | [`create-commit-message`](./create-commit-message/SKILL.md) | Conventional Commits 기반 커밋 메시지 생성 | `커밋 메시지 만들어줘` |
 | [`create-pr`](./create-pr/SKILL.md) | 셀프 리뷰 + 구조화된 본문의 고품질 PR 생성 | `PR 만들어줘` |
 | [`enrich-schema`](./enrich-schema/SKILL.md) | DRF 뷰에 `@extend_schema()` 자동 추가 | `API 문서 보강해줘` |
@@ -25,13 +26,13 @@
 
 ```bash
 # 전체 스킬 설치
-npx skills add aptimizer-co/skills
+npx skills add isac7722/skills
 
 # 특정 스킬만 설치
-npx skills add aptimizer-co/skills@create-commit-message
+npx skills add isac7722/skills@create-commit-message
 
 # 글로벌 설치 (모든 프로젝트에서 사용)
-npx skills add aptimizer-co/skills -g
+npx skills add isac7722/skills -g
 ```
 
 ### Notion 스킬 설치 시 주의
@@ -40,17 +41,17 @@ npx skills add aptimizer-co/skills -g
 
 ```bash
 # 예: notion-update 사용 시
-npx skills add aptimizer-co/skills@notion-shared aptimizer-co/skills@notion-update
+npx skills add isac7722/skills@notion-shared isac7722/skills@notion-update
 
 # 전체 Notion 스택
 npx skills add \
-  aptimizer-co/skills@notion-shared \
-  aptimizer-co/skills@notion-setup \
-  aptimizer-co/skills@notion-config \
-  aptimizer-co/skills@notion-update \
-  aptimizer-co/skills@notion-search \
-  aptimizer-co/skills@notion-ticket \
-  aptimizer-co/skills@tickets-notion
+  isac7722/skills@notion-shared \
+  isac7722/skills@notion-setup \
+  isac7722/skills@notion-config \
+  isac7722/skills@notion-update \
+  isac7722/skills@notion-search \
+  isac7722/skills@notion-ticket \
+  isac7722/skills@tickets-notion
 ```
 
 `notion-shared`가 없으면 `from config_loader import ...` 등에서 `ModuleNotFoundError`가 발생합니다.
@@ -76,6 +77,20 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
 ## 사용법
 
 스킬 설치 후 AI 에이전트에서 슬래시 커맨드 또는 자연어로 호출합니다.
+
+### check-review
+
+리뷰어 코멘트를 코드베이스와 대조해 맞는 지적과 아닌 지적을 분리하고, 개발자 최종 컨펌을 받을 수정 계획을 작성합니다. 컨펌 전에는 코드 변경을 하지 않습니다.
+
+```
+/check-review
+
+---
+리뷰한 내용1
+
+---
+리뷰한 내용2
+```
 
 ### create-commit-message
 

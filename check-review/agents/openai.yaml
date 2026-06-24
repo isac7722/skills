@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Review"
+  short_description: "Verify review feedback and plan fixes"
+  default_prompt: "Use $check-review to verify reviewer comments against the codebase and prepare a confirmation-ready fix plan."
