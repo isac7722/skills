@@ -1,0 +1,26 @@
+version: 1
+default_profile: default
+defaults:
+  mode: guided
+  roles:
+    coordinator:
+      agent: codex
+    research:
+      agent: codex
+    design:
+      agent: codex
+    implementation:
+      agent: claude
+    verification:
+      agent: codex
+  delivery: draft-pr
+profiles:
+  default: {}
+  yolo:
+    mode: yolo
+  claude-debug:
+    roles:
+      research:
+        agent: claude
+      implementation:
+        agent: claude

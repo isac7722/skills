@@ -8,6 +8,7 @@
 
 | 스킬 | 설명 | 트리거 예시 |
 |------|------|------------|
+| [`dev-flow`](./dev-flow/SKILL.md) | YAML 역할 배정으로 Codex·Claude를 조율하고 단계별 확인을 거쳐 개발·검증 | `/dev-flow` |
 | [`check-review`](./check-review/SKILL.md) | 리뷰어 코멘트를 코드 근거로 검증하고 컨펌용 수정 계획 작성 | `/check-review` |
 | [`create-commit-message`](./create-commit-message/SKILL.md) | Conventional Commits 기반 커밋 메시지 생성 | `커밋 메시지 만들어줘` |
 | [`create-pr`](./create-pr/SKILL.md) | 셀프 리뷰 + 구조화된 본문의 고품질 PR 생성 | `PR 만들어줘` |
@@ -77,6 +78,21 @@ PYTHONDONTWRITEBYTECODE=1 uv run --with notion-client --with pyyaml \
 ## 사용법
 
 스킬 설치 후 AI 에이전트에서 슬래시 커맨드 또는 자연어로 호출합니다.
+
+### dev-flow
+
+로컬 Orca에서 Codex 조사·설계 → Claude 구현 → 새 Codex 검증을 기본으로 사용합니다. 기본 `guided`는 조사·요구사항, 설계·계획, 구현, 검증·리뷰 단계마다 사람이 결과를 확인합니다. `yolo`는 처음에 범위·성공 기준·테스트 경계·PR 대상까지 확인한 뒤 구현·수정·검증·PR 초안 게시를 자동 진행합니다.
+
+```text
+/dev-flow 기록 저장→웹 조회 기능을 별도 worktree에서 개발해줘.
+/dev-flow 세션 복원 버그를 수정해줘. 이번에는 조사도 Claude가 맡아줘.
+/dev-flow yolo 기록 저장→웹 조회 기능을 개발해줘.
+/dev-flow <실행ID> 이어서 진행해줘.
+```
+
+개인 설정은 `~/.agents/dev-flow/config.yaml`, 실행 기록은 `~/.agents/dev-flow/runs/`에 둡니다. [설정 예시](dev-flow/assets/config.example.yaml)는 최초 실행 시에만 복사하며, 역할·모델을 실행별로 변경할 수 있습니다. 각 작업자는 `orchestration`, `orca-cli`와 해당 단계의 mattpocock 스킬에 접근할 수 있어야 합니다. 누락된 의존성은 자동 설치하지 않고 알립니다.
+
+guided에서는 검증 결과 확인 시 다음 행동을 명시하고, 사용자가 확인한 경우에만 푸시·PR 초안 게시를 진행합니다. yolo에서는 최초 승인 범위에 따라 진행하며, 성공 기준을 바꾸거나 검증을 생략해야 한다면 다시 확인합니다. 로컬 완료도 선택할 수 있으며 병합·배포는 별도 요청입니다.
 
 ### check-review
 
